@@ -1,0 +1,55 @@
+use macroquad::prelude::*;
+
+#[derive(Debug)]
+pub struct Boid {
+    pub position: Vec2,
+    pub velocity: Vec2,
+    pub color: Color,
+}
+
+impl Boid {
+    pub fn new_random() -> Self {
+        let position = Vec2::new(
+            rand::gen_range(0.0, screen_width()),
+            rand::gen_range(0.0, screen_height()),
+        );
+        let velocity =
+            Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize() * 2.0;
+        Boid {
+            position,
+            velocity,
+            color: Color::new(
+                rand::gen_range(0.0, 1.0),
+                rand::gen_range(0.0, 1.0),
+                rand::gen_range(0.0, 1.0),
+                1.0,
+            ),
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.position += self.velocity;
+
+        // Boundary conditions
+        if self.position.x < 0.0 {
+            self.position.x = screen_width();
+        } else if self.position.x > screen_width() {
+            self.position.x = 0.0;
+        }
+        if self.position.y < 0.0 {
+            self.position.y = screen_height();
+        } else if self.position.y > screen_height() {
+            self.position.y = 0.0;
+        }
+    }
+
+    pub fn draw(&self) {
+        // draw_ellipse(self.position.x, self.position.y, 20.0, 20.0, 0.0, BLUE);
+        draw_triangle(
+            self.position + self.velocity.normalize().rotate(Vec2::Y) * 5.0,
+            self.position - self.velocity.normalize().rotate(Vec2::Y) * 5.0,
+            self.position + self.velocity.normalize() * 10.0,
+            self.color,
+        );
+    }
+}
