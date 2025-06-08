@@ -18,16 +18,28 @@ impl Boid {
         Boid {
             position,
             velocity,
-            color: Color::new(
-                rand::gen_range(0.0, 1.0),
-                rand::gen_range(0.0, 1.0),
-                rand::gen_range(0.0, 1.0),
-                1.0,
-            ),
+            color: Color::new(velocity.x, velocity.y, 1.0, 1.0),
         }
     }
 
     pub fn update(&mut self) {
+        // Prevent position out of bounds
+        // if self.position.x < 0.0
+        //     || self.position.x > screen_width()
+        //     || self.position.y < 0.0
+        //     || self.position.y > screen_height()
+        // {
+        //     self.position = Vec2::new(
+        //         rand::gen_range(0.0, screen_width()),
+        //         rand::gen_range(0.0, screen_height()),
+        //     );
+        // }
+
+        // Prevent zero velocity
+        if self.velocity.length_squared() < 0.1 {
+            self.velocity =
+                Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize() * 2.0;
+        }
         self.position += self.velocity;
 
         // Boundary conditions
