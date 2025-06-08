@@ -4,7 +4,7 @@ mod swarm;
 use macroquad::prelude::*;
 use swarm::Swarm;
 
-#[macroquad::main("MyGame")]
+#[macroquad::main("Boids")]
 async fn main() {
     let mut swarm = Swarm::new(1_000);
     loop {
