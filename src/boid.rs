@@ -22,7 +22,7 @@ impl Boid {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, screen_width: f32, screen_height: f32) {
         // Prevent zero velocity
         if !self.is_alive() {
             self.velocity =
@@ -32,8 +32,8 @@ impl Boid {
         self.position += self.velocity;
 
         // Clamp position to screen bounds instead of wrapping
-        self.position.x = self.position.x.clamp(0.0, screen_width());
-        self.position.y = self.position.y.clamp(0.0, screen_height());
+        self.position.x = self.position.x.clamp(0.0, screen_width);
+        self.position.y = self.position.y.clamp(0.0, screen_height);
     }
 
     pub fn draw(&self) {

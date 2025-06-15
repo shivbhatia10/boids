@@ -1,6 +1,6 @@
 # boids
 
-A simple boid simulation written in Rust with macroquad.
+A boid simulation written in Rust with [macroquad](https://macroquad.rs/).
 
 Uses three rules:
 

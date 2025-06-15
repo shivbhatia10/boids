@@ -4,21 +4,67 @@ use macroquad::prelude::*;
 pub struct Swarm {
     pub boids: Vec<Boid>,
     pub min_group_size: usize,
+    // Cache for performance optimizations
+    screen_width: f32,
+    screen_height: f32,
+    // Pre-allocated random offsets to avoid generating them every frame
+    group_offset_x: f32,
+    group_offset_y: f32,
+    frame_counter: u32,
 }
 
 impl Swarm {
     pub fn new(num_boids: i32, min_group_size: usize) -> Self {
         let boids = (0..num_boids).map(|_| Boid::new_random()).collect();
+        let screen_width = screen_width();
+        let screen_height = screen_height();
         Swarm {
             boids,
             min_group_size,
+            screen_width,
+            screen_height,
+            group_offset_x: 0.0,
+            group_offset_y: 0.0,
+            frame_counter: 0,
         }
     }
 
     pub fn update(&mut self) {
-        for boid in &mut self.boids {
-            boid.update();
+        // Update cached screen dimensions less frequently
+        self.frame_counter += 1;
+        if self.frame_counter % 60 == 0 {
+            self.screen_width = screen_width();
+            self.screen_height = screen_height();
+            // Update random offsets less frequently to reduce random number generation
+            self.group_offset_x = rand::gen_range(-1.0, 1.0);
+            self.group_offset_y = rand::gen_range(-1.0, 1.0);
         }
+
+        for boid in &mut self.boids {
+            boid.update(self.screen_width, self.screen_height);
+        }
+    }
+
+    // Consolidated method to update all behaviors efficiently
+    pub fn update_behaviors(
+        &mut self,
+        alignment_params: (i32, i32, f32),
+        cohesion_params: (i32, i32, f32),
+        separation_params: (i32, i32, f32),
+        edge_params: (f32, f32),
+    ) {
+        // Update alignment
+        self.alignment(alignment_params.0, alignment_params.1, alignment_params.2);
+        // Update cohesion
+        self.cohesion(cohesion_params.0, cohesion_params.1, cohesion_params.2);
+        // Update separation
+        self.separation(
+            separation_params.0,
+            separation_params.1,
+            separation_params.2,
+        );
+        // Update edge avoidance
+        self.edge_avoidance(edge_params.0, edge_params.1);
     }
 
     pub fn draw(&self) {
@@ -27,17 +73,17 @@ impl Swarm {
         }
     }
 
-    fn group_by_position(&mut self, rows: i32, cols: i32) -> Vec<Vec<usize>> {
-        let x_incr = screen_width() / cols as f32;
-        let y_incr = screen_height() / rows as f32;
+    fn group_by_position(&self, rows: i32, cols: i32) -> Vec<Vec<usize>> {
+        let x_incr = self.screen_width / cols as f32;
+        let y_incr = self.screen_height / rows as f32;
         let total_groups = (rows * cols) as usize;
-        let mut groups: Vec<Vec<usize>> = vec![Vec::new(); total_groups];
+        let mut groups = vec![Vec::new(); total_groups];
 
-        // Add random offset to break up grid alignment
-        let x_offset = rand::gen_range(-x_incr * 0.3, x_incr * 0.3);
-        let y_offset = rand::gen_range(-y_incr * 0.3, y_incr * 0.3);
+        // Use cached offsets that change less frequently
+        let x_offset = self.group_offset_x * x_incr * 0.3;
+        let y_offset = self.group_offset_y * y_incr * 0.3;
 
-        for (i, boid) in &mut self.boids.iter().enumerate() {
+        for (i, boid) in self.boids.iter().enumerate() {
             let x_index = ((boid.position.x + x_offset) / x_incr).floor() as i32;
             let y_index = ((boid.position.y + y_offset) / y_incr).floor() as i32;
 
@@ -46,10 +92,7 @@ impl Swarm {
             let y_index = y_index.clamp(0, rows - 1);
 
             let group_index = (y_index * cols + x_index) as usize;
-
-            if group_index < total_groups {
-                groups[group_index].push(i);
-            }
+            groups[group_index].push(i);
         }
         groups
     }
@@ -71,21 +114,28 @@ impl Swarm {
     pub fn alignment(&mut self, rows: i32, cols: i32, factor: f32) {
         let groups = self.group_by_position(rows, cols);
 
-        for group in groups {
+        // Pre-calculate jitter values to reduce random number generation
+        let jitter_x = self.group_offset_x * 0.5;
+        let jitter_y = self.group_offset_y * 0.5;
+        let jitter = Vec2::new(jitter_x, jitter_y);
+
+        for group in &groups {
             if group.len() <= self.min_group_size {
                 continue;
             }
 
             let mut avg_velocity = Vec2::ZERO;
-            for &boid_index in &group {
+            for &boid_index in group {
                 avg_velocity += self.boids[boid_index].velocity;
             }
             avg_velocity /= group.len() as f32;
-            avg_velocity = avg_velocity.normalize();
 
-            for &boid_index in &group {
-                // Add a larger random perturbation to prevent perfect alignment
-                let jitter = Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0));
+            // Only normalize if length is significant
+            if avg_velocity.length_squared() > 0.001 {
+                avg_velocity = avg_velocity.normalize();
+            }
+
+            for &boid_index in group {
                 self.boids[boid_index].velocity = ((1.0 - factor)
                     * self.boids[boid_index].velocity
                     + factor * (avg_velocity + jitter))
@@ -98,28 +148,32 @@ impl Swarm {
     pub fn cohesion(&mut self, rows: i32, cols: i32, factor: f32) {
         let groups = self.group_by_position(rows, cols);
 
-        for group in groups {
+        for group in &groups {
             if group.len() < self.min_group_size {
                 continue;
             }
 
             let mut avg_position = Vec2::ZERO;
-            for &boid_index in &group {
+            for &boid_index in group {
                 avg_position += self.boids[boid_index].position;
             }
             avg_position /= group.len() as f32;
 
-            for &boid_index in &group {
-                // Adjust cohesion strength based on distance to center
-                let distance = (avg_position - self.boids[boid_index].position).length();
-                let distance_factor = (distance / 100.0).min(1.0); // Stronger pull when further away
-                let adjusted_factor = factor * distance_factor;
+            for &boid_index in group {
+                let offset = avg_position - self.boids[boid_index].position;
+                // Use length_squared for distance comparison to avoid sqrt
+                let distance_squared = offset.length_squared();
+                if distance_squared > 0.001 {
+                    let distance = distance_squared.sqrt();
+                    let distance_factor = (distance / 100.0).min(1.0);
+                    let adjusted_factor = factor * distance_factor;
 
-                let direction = (avg_position - self.boids[boid_index].position).normalize();
-                self.boids[boid_index].velocity = ((1.0 - adjusted_factor)
-                    * self.boids[boid_index].velocity
-                    + adjusted_factor * direction)
-                    .normalize();
+                    let direction = offset / distance; // Normalize by dividing by length
+                    self.boids[boid_index].velocity = ((1.0 - adjusted_factor)
+                        * self.boids[boid_index].velocity
+                        + adjusted_factor * direction)
+                        .normalize();
+                }
             }
         }
     }
@@ -127,45 +181,39 @@ impl Swarm {
     // Steer away from nearby boids to avoid crowding
     pub fn separation(&mut self, rows: i32, cols: i32, factor: f32) {
         let groups = self.group_by_position(rows, cols);
-        let min_distance = 15.0; // Minimum distance to avoid division by zero
-        let perception_radius = 35.0; // Only consider boids within this radius
+        let perception_radius_squared = 35.0 * 35.0; // Square the perception radius
 
-        for group in groups {
+        for group in &groups {
             if group.len() <= self.min_group_size {
                 continue;
             }
 
-            for &boid_index in &group {
+            for &boid_index in group {
                 let mut separation_force = Vec2::ZERO;
                 let mut count = 0;
+                let my_position = self.boids[boid_index].position;
 
-                for &other_index in &group {
+                for &other_index in group {
                     if other_index == boid_index {
                         continue;
                     }
 
-                    let other_position = self.boids[other_index].position;
-                    let my_position = self.boids[boid_index].position;
+                    let offset = my_position - self.boids[other_index].position;
+                    let distance_squared = offset.length_squared();
 
-                    let offset = my_position - other_position;
-                    let distance = offset.length();
-
-                    // Only respond to boids within perception radius
-                    if distance < perception_radius {
+                    // Only respond to boids within perception radius (using squared distance)
+                    if distance_squared < perception_radius_squared && distance_squared > 0.001 {
+                        let distance = distance_squared.sqrt();
                         // The closer the boid, the stronger the repulsion (1/distance)
-                        // Also normalize the direction vector
-                        let repulsion_strength = 15.0 / distance.max(min_distance);
-                        separation_force += offset.normalize() * repulsion_strength;
+                        let repulsion_strength = 15.0 / distance.max(15.0);
+                        separation_force += (offset / distance) * repulsion_strength; // Normalize by dividing by distance
                         count += 1;
                     }
                 }
 
                 // Only adjust velocity if we've detected nearby boids
-                if count > 0 {
-                    // Normalize the separation force
-                    if separation_force.length_squared() > 0.0 {
-                        separation_force = separation_force.normalize();
-                    }
+                if count > 0 && separation_force.length_squared() > 0.0 {
+                    separation_force = separation_force.normalize();
 
                     // Mix the current velocity with the separation force
                     self.boids[boid_index].velocity = ((1.0 - factor)
@@ -179,8 +227,9 @@ impl Swarm {
 
     // Steer away from screen edges
     pub fn edge_avoidance(&mut self, margin: f32, factor: f32) {
-        let screen_w = screen_width();
-        let screen_h = screen_height();
+        // Use cached screen dimensions
+        let screen_w = self.screen_width;
+        let screen_h = self.screen_height;
 
         for boid in &mut self.boids {
             let mut avoidance_force = Vec2::ZERO;
