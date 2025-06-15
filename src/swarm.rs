@@ -33,9 +33,13 @@ impl Swarm {
         let total_groups = (rows * cols) as usize;
         let mut groups: Vec<Vec<usize>> = vec![Vec::new(); total_groups];
 
+        // Add random offset to break up grid alignment
+        let x_offset = rand::gen_range(-x_incr * 0.3, x_incr * 0.3);
+        let y_offset = rand::gen_range(-y_incr * 0.3, y_incr * 0.3);
+
         for (i, boid) in &mut self.boids.iter().enumerate() {
-            let x_index = (boid.position.x / x_incr).floor() as i32;
-            let y_index = (boid.position.y / y_incr).floor() as i32;
+            let x_index = ((boid.position.x + x_offset) / x_incr).floor() as i32;
+            let y_index = ((boid.position.y + y_offset) / y_incr).floor() as i32;
 
             // Ensure boid is always assigned to a valid group by clamping indices
             let x_index = x_index.clamp(0, cols - 1);
@@ -80,8 +84,8 @@ impl Swarm {
             avg_velocity = avg_velocity.normalize();
 
             for &boid_index in &group {
-                // Add a small random perturbation to prevent perfect alignment
-                let jitter = Vec2::new(rand::gen_range(-0.5, 0.5), rand::gen_range(-0.5, 0.5));
+                // Add a larger random perturbation to prevent perfect alignment
+                let jitter = Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0));
                 self.boids[boid_index].velocity = ((1.0 - factor)
                     * self.boids[boid_index].velocity
                     + factor * (avg_velocity + jitter))
