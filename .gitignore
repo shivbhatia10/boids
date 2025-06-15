@@ -1,1 +1,9 @@
-/target
+# Ignore everything in target directory
+/target/*
+
+# But keep the specific WASM file
+!/target/wasm32-unknown-unknown/
+/target/wasm32-unknown-unknown/*
+!/target/wasm32-unknown-unknown/release/
+/target/wasm32-unknown-unknown/release/*
+!/target/wasm32-unknown-unknown/release/boids.wasm
