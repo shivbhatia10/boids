@@ -14,9 +14,9 @@ async fn main() {
         clear_background(BLACK);
 
         // swarm.color_by_position(rows, cols);
-        swarm.alignment(alignment_rows, alignment_cols, 0.5);
-        swarm.cohesion(cohesion_rows, cohesion_cols, 0.3);
-        swarm.separation(separation_rows, separation_cols, 0.1);
+        swarm.alignment(alignment_rows, alignment_cols, 0.1);
+        swarm.cohesion(cohesion_rows, cohesion_cols, 0.2);
+        swarm.separation(separation_rows, separation_cols, 0.06);
 
         swarm.update();
         swarm.draw();
