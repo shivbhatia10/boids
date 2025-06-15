@@ -63,8 +63,8 @@ impl Swarm {
         }
     }
 
+    // Steer toward the average velocity of nearby boids
     pub fn alignment(&mut self, rows: i32, cols: i32, factor: f32) {
-        // Steer toward the average velocity of nearby boids
         let groups = self.group_by_position(rows, cols);
 
         for group in groups {
@@ -90,8 +90,8 @@ impl Swarm {
         }
     }
 
+    // Steer toward the average position of nearby boids
     pub fn cohesion(&mut self, rows: i32, cols: i32, factor: f32) {
-        // Steer toward the average position of nearby boids
         let groups = self.group_by_position(rows, cols);
 
         for group in groups {
@@ -120,8 +120,8 @@ impl Swarm {
         }
     }
 
+    // Steer away from nearby boids to avoid crowding
     pub fn separation(&mut self, rows: i32, cols: i32, factor: f32) {
-        // Steer away from nearby boids to avoid crowding
         let groups = self.group_by_position(rows, cols);
         let min_distance = 15.0; // Minimum distance to avoid division by zero
         let perception_radius = 35.0; // Only consider boids within this radius
@@ -169,6 +169,40 @@ impl Swarm {
                         + factor * separation_force)
                         .normalize();
                 }
+            }
+        }
+    }
+
+    // Steer away from screen edges
+    pub fn edge_avoidance(&mut self, margin: f32, factor: f32) {
+        let screen_w = screen_width();
+        let screen_h = screen_height();
+
+        for boid in &mut self.boids {
+            let mut avoidance_force = Vec2::ZERO;
+
+            // Left edge
+            if boid.position.x < margin {
+                avoidance_force.x += (margin - boid.position.x) / margin;
+            }
+            // Right edge
+            if boid.position.x > screen_w - margin {
+                avoidance_force.x -= (boid.position.x - (screen_w - margin)) / margin;
+            }
+            // Top edge
+            if boid.position.y < margin {
+                avoidance_force.y += (margin - boid.position.y) / margin;
+            }
+            // Bottom edge
+            if boid.position.y > screen_h - margin {
+                avoidance_force.y -= (boid.position.y - (screen_h - margin)) / margin;
+            }
+
+            // Apply the avoidance force if it exists
+            if avoidance_force.length_squared() > 0.0 {
+                avoidance_force = avoidance_force.normalize();
+                boid.velocity =
+                    ((1.0 - factor) * boid.velocity + factor * avoidance_force).normalize();
             }
         }
     }

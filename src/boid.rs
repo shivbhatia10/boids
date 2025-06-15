@@ -31,17 +31,9 @@ impl Boid {
 
         self.position += self.velocity;
 
-        // Boundary conditions
-        if self.position.x < 0.0 {
-            self.position.x = screen_width();
-        } else if self.position.x > screen_width() {
-            self.position.x = 0.0;
-        }
-        if self.position.y < 0.0 {
-            self.position.y = screen_height();
-        } else if self.position.y > screen_height() {
-            self.position.y = 0.0;
-        }
+        // Clamp position to screen bounds instead of wrapping
+        self.position.x = self.position.x.clamp(0.0, screen_width());
+        self.position.y = self.position.y.clamp(0.0, screen_height());
     }
 
     pub fn draw(&self) {
