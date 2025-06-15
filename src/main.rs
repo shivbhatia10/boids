@@ -6,7 +6,7 @@ use swarm::Swarm;
 
 #[macroquad::main("Boids")]
 async fn main() {
-    let mut swarm = Swarm::new(10_000, 5);
+    let mut swarm = Swarm::new(5_000, 5);
     let (alignment_rows, alignment_cols) = (10, 10);
     let (cohesion_rows, cohesion_cols) = (3, 5);
     let (separation_rows, separation_cols) = (30, 30);

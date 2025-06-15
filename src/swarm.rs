@@ -34,8 +34,8 @@ impl Swarm {
         let mut groups: Vec<Vec<usize>> = vec![Vec::new(); total_groups];
 
         // Add random offset to break up grid alignment
-        let x_offset = rand::gen_range(-x_incr * 0.3, x_incr * 0.3);
-        let y_offset = rand::gen_range(-y_incr * 0.3, y_incr * 0.3);
+        let x_offset = rand::gen_range(-x_incr * 3.0, x_incr * 3.0);
+        let y_offset = rand::gen_range(-y_incr * 3.0, y_incr * 3.0);
 
         for (i, boid) in &mut self.boids.iter().enumerate() {
             let x_index = ((boid.position.x + x_offset) / x_incr).floor() as i32;
