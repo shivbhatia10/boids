@@ -27,25 +27,30 @@ impl Swarm {
         }
     }
 
-    fn group_by_position(&mut self, rows: i32, cols: i32) -> Vec<Vec<usize>> {
-        let x_incr = screen_width() / cols as f32;
-        let y_incr = screen_height() / rows as f32;
-        let total_groups = (rows * cols) as usize;
+    fn group_by_position(&mut self, rows: i32, cols: i32, depth: i32) -> Vec<Vec<usize>> {
+        let bound = 100.0;
+        let x_incr = (2.0 * bound) / cols as f32;
+        let y_incr = (2.0 * bound) / rows as f32;
+        let z_incr = (2.0 * bound) / depth as f32;
+        let total_groups = (rows * cols * depth) as usize;
         let mut groups: Vec<Vec<usize>> = vec![Vec::new(); total_groups];
 
         // Add random offset to break up grid alignment
         let x_offset = rand::gen_range(-x_incr * 3.0, x_incr * 3.0);
         let y_offset = rand::gen_range(-y_incr * 3.0, y_incr * 3.0);
+        let z_offset = rand::gen_range(-z_incr * 3.0, z_incr * 3.0);
 
         for (i, boid) in &mut self.boids.iter().enumerate() {
-            let x_index = ((boid.position.x + x_offset) / x_incr).floor() as i32;
-            let y_index = ((boid.position.y + y_offset) / y_incr).floor() as i32;
+            let x_index = ((boid.position.x + bound + x_offset) / x_incr).floor() as i32;
+            let y_index = ((boid.position.y + bound + y_offset) / y_incr).floor() as i32;
+            let z_index = ((boid.position.z + bound + z_offset) / z_incr).floor() as i32;
 
             // Ensure boid is always assigned to a valid group by clamping indices
             let x_index = x_index.clamp(0, cols - 1);
             let y_index = y_index.clamp(0, rows - 1);
+            let z_index = z_index.clamp(0, depth - 1);
 
-            let group_index = (y_index * cols + x_index) as usize;
+            let group_index = (z_index * rows * cols + y_index * cols + x_index) as usize;
 
             if group_index < total_groups {
                 groups[group_index].push(i);
@@ -54,29 +59,30 @@ impl Swarm {
         groups
     }
 
-    pub fn _color_by_position(&mut self, rows: i32, cols: i32) {
-        let groups = self.group_by_position(rows, cols);
+    pub fn _color_by_position(&mut self, rows: i32, cols: i32, depth: i32) {
+        let groups = self.group_by_position(rows, cols, depth);
 
         for (i, group) in groups.iter().enumerate() {
-            let row = (i as i32) / cols;
-            let col = (i as i32) % cols;
+            let z = (i as i32) / (rows * cols);
+            let y = ((i as i32) % (rows * cols)) / cols;
+            let x = (i as i32) % cols;
 
             for &boid_index in group {
-                self.boids[boid_index].color = if (row + col) % 2 == 0 { RED } else { BLUE }
+                self.boids[boid_index].color = if (x + y + z) % 2 == 0 { RED } else { BLUE }
             }
         }
     }
 
     // Steer toward the average velocity of nearby boids
-    pub fn alignment(&mut self, rows: i32, cols: i32, factor: f32) {
-        let groups = self.group_by_position(rows, cols);
+    pub fn alignment(&mut self, rows: i32, cols: i32, depth: i32, factor: f32) {
+        let groups = self.group_by_position(rows, cols, depth);
 
         for group in groups {
             if group.len() <= self.min_group_size {
                 continue;
             }
 
-            let mut avg_velocity = Vec2::ZERO;
+            let mut avg_velocity = Vec3::ZERO;
             for &boid_index in &group {
                 avg_velocity += self.boids[boid_index].velocity;
             }
@@ -85,7 +91,11 @@ impl Swarm {
 
             for &boid_index in &group {
                 // Add a larger random perturbation to prevent perfect alignment
-                let jitter = Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0));
+                let jitter = Vec3::new(
+                    rand::gen_range(-1.0, 1.0),
+                    rand::gen_range(-1.0, 1.0),
+                    rand::gen_range(-1.0, 1.0),
+                );
                 self.boids[boid_index].velocity = ((1.0 - factor)
                     * self.boids[boid_index].velocity
                     + factor * (avg_velocity + jitter))
@@ -95,15 +105,15 @@ impl Swarm {
     }
 
     // Steer toward the average position of nearby boids
-    pub fn cohesion(&mut self, rows: i32, cols: i32, factor: f32) {
-        let groups = self.group_by_position(rows, cols);
+    pub fn cohesion(&mut self, rows: i32, cols: i32, depth: i32, factor: f32) {
+        let groups = self.group_by_position(rows, cols, depth);
 
         for group in groups {
             if group.len() < self.min_group_size {
                 continue;
             }
 
-            let mut avg_position = Vec2::ZERO;
+            let mut avg_position = Vec3::ZERO;
             for &boid_index in &group {
                 avg_position += self.boids[boid_index].position;
             }
@@ -125,8 +135,8 @@ impl Swarm {
     }
 
     // Steer away from nearby boids to avoid crowding
-    pub fn separation(&mut self, rows: i32, cols: i32, factor: f32) {
-        let groups = self.group_by_position(rows, cols);
+    pub fn separation(&mut self, rows: i32, cols: i32, depth: i32, factor: f32) {
+        let groups = self.group_by_position(rows, cols, depth);
         let min_distance = 15.0; // Minimum distance to avoid division by zero
         let perception_radius = 35.0; // Only consider boids within this radius
 
@@ -136,7 +146,7 @@ impl Swarm {
             }
 
             for &boid_index in &group {
-                let mut separation_force = Vec2::ZERO;
+                let mut separation_force = Vec3::ZERO;
                 let mut count = 0;
 
                 for &other_index in &group {
@@ -177,29 +187,35 @@ impl Swarm {
         }
     }
 
-    // Steer away from screen edges
+    // Steer away from 3D volume edges
     pub fn edge_avoidance(&mut self, margin: f32, factor: f32) {
-        let screen_w = screen_width();
-        let screen_h = screen_height();
+        let bound = 50.0;
 
         for boid in &mut self.boids {
-            let mut avoidance_force = Vec2::ZERO;
+            let mut avoidance_force = Vec3::ZERO;
 
-            // Left edge
-            if boid.position.x < margin {
-                avoidance_force.x += (margin - boid.position.x) / margin;
+            // X boundaries
+            if boid.position.x < -bound + margin {
+                avoidance_force.x += ((-bound + margin) - boid.position.x) / margin;
             }
-            // Right edge
-            if boid.position.x > screen_w - margin {
-                avoidance_force.x -= (boid.position.x - (screen_w - margin)) / margin;
+            if boid.position.x > bound - margin {
+                avoidance_force.x -= (boid.position.x - (bound - margin)) / margin;
             }
-            // Top edge
-            if boid.position.y < margin {
-                avoidance_force.y += (margin - boid.position.y) / margin;
+
+            // Y boundaries
+            if boid.position.y < -bound + margin {
+                avoidance_force.y += ((-bound + margin) - boid.position.y) / margin;
             }
-            // Bottom edge
-            if boid.position.y > screen_h - margin {
-                avoidance_force.y -= (boid.position.y - (screen_h - margin)) / margin;
+            if boid.position.y > bound - margin {
+                avoidance_force.y -= (boid.position.y - (bound - margin)) / margin;
+            }
+
+            // Z boundaries
+            if boid.position.z < 0.0 + margin {
+                avoidance_force.z += ((-bound + margin) - boid.position.z) / margin;
+            }
+            if boid.position.z > bound - margin {
+                avoidance_force.z -= (boid.position.z - (bound - margin)) / margin;
             }
 
             // Apply the avoidance force if it exists
