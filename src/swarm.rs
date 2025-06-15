@@ -1,16 +1,18 @@
-use std::ptr::read_unaligned;
-
 use crate::boid::Boid;
 use macroquad::prelude::*;
 
 pub struct Swarm {
     pub boids: Vec<Boid>,
+    pub min_group_size: usize,
 }
 
 impl Swarm {
-    pub fn new(num_boids: i32) -> Self {
+    pub fn new(num_boids: i32, min_group_size: usize) -> Self {
         let boids = (0..num_boids).map(|_| Boid::new_random()).collect();
-        Swarm { boids }
+        Swarm {
+            boids,
+            min_group_size,
+        }
     }
 
     pub fn update(&mut self) {
@@ -66,7 +68,7 @@ impl Swarm {
         let groups = self.group_by_position(rows, cols);
 
         for group in groups {
-            if group.is_empty() {
+            if group.len() <= self.min_group_size {
                 continue;
             }
 
@@ -75,13 +77,15 @@ impl Swarm {
                 avg_velocity += self.boids[boid_index].velocity;
             }
             avg_velocity /= group.len() as f32;
-            avg_velocity = avg_velocity.normalize() * 2.0;
+            avg_velocity = avg_velocity.normalize();
 
             for &boid_index in &group {
-                self.boids[boid_index].velocity =
-                    ((1.0 - factor) * self.boids[boid_index].velocity + factor * avg_velocity)
-                        .normalize()
-                        * 2.0;
+                // Add a small random perturbation to prevent perfect alignment
+                let jitter = Vec2::new(rand::gen_range(-0.5, 0.5), rand::gen_range(-0.5, 0.5));
+                self.boids[boid_index].velocity = ((1.0 - factor)
+                    * self.boids[boid_index].velocity
+                    + factor * (avg_velocity + jitter))
+                    .normalize();
             }
         }
     }
@@ -91,7 +95,7 @@ impl Swarm {
         let groups = self.group_by_position(rows, cols);
 
         for group in groups {
-            if group.is_empty() {
+            if group.len() < self.min_group_size {
                 continue;
             }
 
@@ -102,11 +106,16 @@ impl Swarm {
             avg_position /= group.len() as f32;
 
             for &boid_index in &group {
-                let direction = (avg_position - self.boids[boid_index].position).normalize() * 2.0;
-                self.boids[boid_index].velocity =
-                    ((1.0 - factor) * self.boids[boid_index].velocity + factor * direction)
-                        .normalize()
-                        * 2.0;
+                // Adjust cohesion strength based on distance to center
+                let distance = (avg_position - self.boids[boid_index].position).length();
+                let distance_factor = (distance / 100.0).min(1.0); // Stronger pull when further away
+                let adjusted_factor = factor * distance_factor;
+
+                let direction = (avg_position - self.boids[boid_index].position).normalize();
+                self.boids[boid_index].velocity = ((1.0 - adjusted_factor)
+                    * self.boids[boid_index].velocity
+                    + adjusted_factor * direction)
+                    .normalize();
             }
         }
     }
@@ -114,11 +123,11 @@ impl Swarm {
     pub fn separation(&mut self, rows: i32, cols: i32, factor: f32) {
         // Steer away from nearby boids to avoid crowding
         let groups = self.group_by_position(rows, cols);
-        let min_distance = 10.0; // Minimum distance to avoid division by zero
-        let perception_radius = 50.0; // Only consider boids within this radius
+        let min_distance = 15.0; // Minimum distance to avoid division by zero
+        let perception_radius = 35.0; // Only consider boids within this radius
 
         for group in groups {
-            if group.len() <= 1 {
+            if group.len() <= self.min_group_size {
                 continue;
             }
 
@@ -141,7 +150,7 @@ impl Swarm {
                     if distance < perception_radius {
                         // The closer the boid, the stronger the repulsion (1/distance)
                         // Also normalize the direction vector
-                        let repulsion_strength = 10.0 / distance.max(min_distance);
+                        let repulsion_strength = 15.0 / distance.max(min_distance);
                         separation_force += offset.normalize() * repulsion_strength;
                         count += 1;
                     }
@@ -151,46 +160,16 @@ impl Swarm {
                 if count > 0 {
                     // Normalize the separation force
                     if separation_force.length_squared() > 0.0 {
-                        separation_force = separation_force.normalize() * 2.0;
+                        separation_force = separation_force.normalize();
                     }
 
                     // Mix the current velocity with the separation force
                     self.boids[boid_index].velocity = ((1.0 - factor)
                         * self.boids[boid_index].velocity
                         + factor * separation_force)
-                        .normalize()
-                        * 2.0;
+                        .normalize();
                 }
             }
         }
     }
-    // pub fn separation(&mut self, rows: i32, cols: i32, factor: f32) {
-    //     let groups = self.group_by_position(rows, cols);
-
-    //     for group in groups {
-    //         if group.is_empty() {
-    //             continue;
-    //         }
-
-    //         for &boid_index in &group {
-    //             let mut center_of_mass_of_others = Vec2::ZERO;
-
-    //             for &other_index in &group {
-    //                 if other_index == boid_index {
-    //                     continue;
-    //                 }
-    //                 center_of_mass_of_others += self.boids[other_index].position;
-    //             }
-
-    //             center_of_mass_of_others = center_of_mass_of_others / (group.len() as f32 - 1.0);
-    //             let separation_vector =
-    //                 (self.boids[boid_index].position - center_of_mass_of_others).normalize() * 2.0;
-
-    //             self.boids[boid_index].velocity =
-    //                 ((1.0 - factor) * self.boids[boid_index].velocity - factor * separation_vector)
-    //                     .normalize()
-    //                     * 2.0;
-    //         }
-    //     }
-    // }
 }

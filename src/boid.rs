@@ -14,7 +14,7 @@ impl Boid {
             rand::gen_range(0.0, screen_height()),
         );
         let velocity =
-            Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize() * 2.0;
+            Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize();
         Boid {
             position,
             velocity,
@@ -23,23 +23,12 @@ impl Boid {
     }
 
     pub fn update(&mut self) {
-        // Prevent position out of bounds
-        // if self.position.x < 0.0
-        //     || self.position.x > screen_width()
-        //     || self.position.y < 0.0
-        //     || self.position.y > screen_height()
-        // {
-        //     self.position = Vec2::new(
-        //         rand::gen_range(0.0, screen_width()),
-        //         rand::gen_range(0.0, screen_height()),
-        //     );
-        // }
-
         // Prevent zero velocity
-        if self.velocity.length_squared() < 0.1 {
+        if !self.is_alive() {
             self.velocity =
-                Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize() * 2.0;
+                Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)).normalize();
         }
+
         self.position += self.velocity;
 
         // Boundary conditions
@@ -63,5 +52,9 @@ impl Boid {
             self.position + self.velocity.normalize() * 10.0,
             self.color,
         );
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.velocity.length() > 0.001
     }
 }
